@@ -20,12 +20,15 @@ var build_configs = parseBuildConfigs(process.argv[3])
 var max = 0;
 var sum = 0;
 var jobs = {};
+var counter=1;
 for(var i = 0;i < builds.builds.length;i++) {
   var b = builds.builds[i];
   var duration = b.endtime - b.starttime
   var price = 0;
   var slavename = b.properties.slavename
   var builduid = b.properties.builduid;
+  if (!builduid)
+    builduid="nouid"+counter++
   if (slavename) {
     var nodeType = slavename.replace(new RegExp("-ec2-[0-9]+$"), "")
     var awsNode = build_configs[nodeType]
@@ -53,4 +56,4 @@ for (var builduid in jobs) {
     max = j
 }
 
-console.log([max.price, max.duration/60/60, sum])
+console.log([max.price, max.duration/60/60, max.builduid, max.comments, sum])
