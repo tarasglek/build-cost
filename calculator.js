@@ -3,17 +3,20 @@
 // http://hg.mozilla.org/build/buildapi/file/358a04471ef1/buildapi/scripts/reporter.py
 var fs = require('fs');
 var builds = JSON.parse(fs.readFileSync(process.argv[2]))
+var ec2_regexp = new RegExp("-ec2-[0-9]+$");
 function parseBuildConfigs(dir) {
   var build_config_files = fs.readdirSync(dir);
   var build_configs = {}
   for (var i = 0;i < build_config_files.length;i++) {
     var f = build_config_files[i];
     var info = JSON.parse(fs.readFileSync(dir + "/" + f));
-    build_configs[f] = info['us-east-1'].instance_type;
+    var east_coast = info['us-east-1']
+    var storage = east_coast.device_map['/dev/sda1'].size
+    build_configs[f] = [east_coast.instance_type, storage];
   }
   return build_configs;
 }
-// hardcoded list from http://calculator.s3.amazonaws.com/calc5.html 
+// hardcoded[price, reserved_price] list from http://calculator.s3.amazonaws.com/calc5.html 
 var prices = {'m3.xlarge': [0.500, 0.187], 'm1.xlarge':[ 0.480, 0.170], 'm1.large':[0.240, 0.085 ], 'm1.medium':[0.120, 0.043]};
 
 var build_configs = parseBuildConfigs(process.argv[3])
@@ -30,10 +33,11 @@ for(var i = 0;i < builds.builds.length;i++) {
   if (!builduid)
     builduid="nouid"+counter++
   if (slavename) {
-    var nodeType = slavename.replace(new RegExp("-ec2-[0-9]+$"), "")
+    var nodeType = slavename.replace(ec2_regexp, "")
     var awsNode = build_configs[nodeType]
     if (awsNode) {
-      var pricePerHour = prices[awsNode][0]
+      awsNode = awsNode[0]
+      var pricePerHour = prices[awsNode][0] *0.93 +  prices[awsNode][1]*0.07 // based on convo
       price = duration / 60 / 60 * pricePerHour
     }
   }
@@ -56,4 +60,13 @@ for (var builduid in jobs) {
     max = j
 }
 
-console.log([max.price, max.duration/60/60, max.builduid, max.comments, sum])
+var storage = 0;
+for (var slave in builds.slaves) {
+  slave = builds.slaves[slave];
+  var nodeType = slave.replace(ec2_regexp, "")
+  var awsNode = build_configs[nodeType]
+  if (awsNode) {
+    storage += awsNode[1];
+  }
+}
+console.log([max.price, max.duration/60/60, max.builduid, max.comments, sum+storage*0.1/31])
