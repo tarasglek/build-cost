@@ -1,0 +1,132 @@
+diff --git a/tools/perf/builtin-timechart.c b/tools/perf/builtin-timechart.c
+index c2e0231..c303893 100644
+--- a/tools/perf/builtin-timechart.c
++++ b/tools/perf/builtin-timechart.c
+@@ -40,7 +40,7 @@
+ #define SUPPORT_OLD_POWER_EVENTS 1
+ #define PWR_EVENT_EXIT -1
+ 
+-
++extern FILE *svgfile;
+ static unsigned int	numcpus;
+ static u64		min_freq;	/* Lowest CPU frequency seen */
+ static u64		max_freq;	/* Highest CPU frequency seen */
+@@ -759,19 +759,27 @@ static void draw_cpu_usage(void)
+ 	while (p) {
+ 		c = p->all;
+ 		while (c) {
++                  fprintf(svgfile, "{\"cpu\":\"%s\", \"samples\":[", c->comm);
++                  int first = 1;
+ 			sample = c->samples;
+ 			while (sample) {
+-				if (sample->type == TYPE_RUNNING)
+-					svg_process(sample->cpu, sample->start_time, sample->end_time, "sample", c->comm);
+-
+-				sample = sample->next;
++                          if (sample->type == TYPE_RUNNING) {
++                            if (!first)
++                              fprintf(svgfile, ",");
++                            fprintf(svgfile, "%i,%lu,%lu", sample->cpu, sample->start_time, 
++                                    sample->end_time);
++                            first = 0;
++                          }
++                          sample = sample->next;
+ 			}
+ 			c = c->next;
++                        fprintf(svgfile, "]}\n");
+ 		}
+ 		p = p->next;
+ 	}
+ }
+ 
++
+ static void draw_process_bars(void)
+ {
+ 	struct per_pid *p;
+@@ -790,28 +798,23 @@ static void draw_process_bars(void)
+ 				c = c->next;
+ 				continue;
+ 			}
+-
+-			svg_box(Y, c->start_time, c->end_time, "process");
++                        fprintf(svgfile, "{\"process\":\"%s\", \"pid\":%i, \"total_time\":%lu, \"samples\":[", c->comm, p->pid, c->total_time);
+ 			sample = c->samples;
+ 			while (sample) {
+-				if (sample->type == TYPE_RUNNING)
+-					svg_sample(Y, sample->cpu, sample->start_time, sample->end_time);
+-				if (sample->type == TYPE_BLOCKED)
+-					svg_box(Y, sample->start_time, sample->end_time, "blocked");
+-				if (sample->type == TYPE_WAITING)
+-					svg_waiting(Y, sample->start_time, sample->end_time);
+-				sample = sample->next;
+-			}
+-
+-			if (c->comm) {
+-				char comm[256];
+-				if (c->total_time > 5000000000) /* 5 seconds */
+-					sprintf(comm, "%s:%i (%2.2fs)", c->comm, p->pid, c->total_time / 1000000000.0);
+-				else
+-					sprintf(comm, "%s:%i (%3.1fms)", c->comm, p->pid, c->total_time / 1000000.0);
+-
+-				svg_text(Y, c->start_time, comm);
++                          if (sample != c->samples)
++                            fprintf(svgfile, ",");
++                          if (sample->type == TYPE_RUNNING)
++                            fprintf(svgfile, "%i", sample->cpu);
++                          if (sample->type == TYPE_BLOCKED) {
++                            fprintf(svgfile, "-1");
++                          }
++                          if (sample->type == TYPE_WAITING)
++                            fprintf(svgfile, "-2");
++                          fprintf(svgfile, ",%lu,%lu", (sample->start_time-first_time)/1000000, 
++                                  (sample->end_time - sample->start_time)/1000000);
++                          sample = sample->next;
+ 			}
++                        fprintf(svgfile, "]}\n");
+ 			c->Y = Y;
+ 			Y++;
+ 			c = c->next;
+@@ -954,20 +957,21 @@ static void write_svg_file(const char *filename)
+ 	if (count < 15)
+ 		count = determine_display_tasks(TIME_THRESH / 10);
+ 
+-	open_svg(filename, numcpus, count, first_time, last_time);
+-
+-	svg_time_grid();
+-	svg_legenda();
++	//open_svg(filename, numcpus, count, first_time, last_time);
+ 
++	//svg_time_grid();
++	//svg_legenda();
++        /*
+ 	for (i = 0; i < numcpus; i++)
+ 		svg_cpu_box(i, max_freq, turbo_frequency);
+-
+-	draw_cpu_usage();
++        */
++        svgfile = fopen(filename, "w");
++	//draw_cpu_usage();
+ 	draw_process_bars();
+-	draw_c_p_states();
+-	draw_wakeups();
++	//draw_c_p_states();
++	//draw_wakeups();
+ 
+-	svg_close();
++	fclose(svgfile);
+ }
+ 
+ static int __cmd_timechart(const char *output_name)
+diff --git a/tools/perf/util/svghelper.c b/tools/perf/util/svghelper.c
+index 96c8660..e2613de 100644
+--- a/tools/perf/util/svghelper.c
++++ b/tools/perf/util/svghelper.c
+@@ -32,7 +32,7 @@ int svg_page_width = 1000;
+ #define MIN_TEXT_SIZE 0.01
+ 
+ static u64 total_height;
+-static FILE *svgfile;
++FILE *svgfile;
+ 
+ static double cpu2slot(int cpu)
+ {
