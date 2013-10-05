@@ -27,6 +27,7 @@ function convert(cpu) {
     return a[0] - b[0];
   }
   var dedup = []
+  //TODO: should be able to reverse instead
   dest.sort(compare)
   for (var i = 0;i < dest.length;i++) {
     var current = dest[i]
@@ -56,23 +57,25 @@ function main(data) {
   var lines = data.split('\n')
   var converted = []
   var axis_labels = ['ticks']
+  var id2name = {}
   for (var i=0;i<lines.length;i++) {
     var l = lines[i]
     if (!l.length) continue;
     var o = JSON.parse(l)
     if (o.process && o.samples.length) {
       var c = convert(o, i)
-      var n = {id:converted.length, name:(o.process + "/"+o.pid), samples:c, i:0}
+      var n = {id:converted.length+1, name:(o.process + "/"+o.pid), samples:c, i:0}
       if (!c.length)
         continue
       converted.push(n)
+      id2name[n.id] = n.name
       //console.log(uneval(n))
       axis_labels.push(n.name)
     }
   }
   lines = undefined
   var graph = []
-
+  var annotations = [];
   while(true) {
     var lowest_start_time = undefined
     // x axis + number of processes we graph
@@ -101,6 +104,7 @@ function main(data) {
       var sv = c.samples[c.i]
       start_time = sv[0];
       if (lowest_start_time < start_time) {
+        if (c.i) dest[c.id + 1] = null
         continue
       }
       // http://dygraphs.com/tests/custom-circles.html
@@ -109,6 +113,14 @@ function main(data) {
       var wait_kind = sv[2];
       dest[c.id + 1] = c.id//[y*5,wait_kind]
       if (start_time == lowest_start_time) {
+        /*if (!c.annotation) {
+          c.annotation = {i:c.i,
+                             series: c.name,
+                             x: start_time,
+                             shortText: n.name}
+          annotations.push(c.annotation)
+        }*/
+
         if (wait_time) {
           sv[1]--;
           sv[0]++;
@@ -119,7 +131,12 @@ function main(data) {
     }
     graph.push(dest)
   }
-
+  function yFormatter(y) {
+    if (y in id2name)
+      return id2name[y]
+    else 
+      return y
+  }
   g = new Dygraph(
     document.getElementById("div_g"),
     graph, {
@@ -129,20 +146,17 @@ function main(data) {
       drawPointCallback:Dygraph.Circles.TRIANGLE,
  pointSize : 5,
             highlightCircleSize: 8,
-//      drawPointCallback: frown
+      connectSeparatedPoints:true,
+      yAxisLabelWidth:200,
+//      drawPointCallback: frown,
+      axes:{y:{
+              axisLabelFormatter:yFormatter,
+              gridLinePattern:[1,1]
+            }}
     })
-/*
-  var annotations = [];
-  for (var y=0;y<converted.length;y++) {
-    var c = converted[y]
-    annotations.push({
-                       series: n.name,
-                       x: ""+c.samples[0][0]-first_lowest_start_time,
-                       shortText: n.name,
-                       text: 'Stock Market Crash '})
-  }
+
   console.log(uneval(annotations))
-  g.setAnnotations(annotations)*/
+  g.setAnnotations(annotations)
 
 }
 
