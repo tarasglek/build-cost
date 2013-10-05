@@ -64,11 +64,12 @@ function main(data) {
     var o = JSON.parse(l)
     if (o.process && o.samples.length) {
       var c = convert(o, i)
-      var n = {id:converted.length+1, name:(o.process + "/"+o.pid), samples:c, i:0}
+      var n = {y:converted.length, id:converted.length, name:(o.process + "/" + o.pid), samples:c, i:0}
       if (!c.length)
         continue
+	  
       converted.push(n)
-      id2name[n.id] = n.name
+      id2name[n.y] = n.name
       //console.log(uneval(n))
       axis_labels.push(n.name)
     }
@@ -104,14 +105,14 @@ function main(data) {
       var sv = c.samples[c.i]
       start_time = sv[0];
       if (lowest_start_time < start_time) {
-        if (c.i) dest[c.id + 1] = null
+        if (c.i) dest[c.y + 1] = null
         continue
       }
       // http://dygraphs.com/tests/custom-circles.html
 
       var wait_time = sv[1];
       var wait_kind = sv[2];
-      dest[c.id + 1] = c.id//[y*5,wait_kind]
+      dest[c.id + 1] = c.y//[y*5,wait_kind]
       if (start_time == lowest_start_time) {
         /*if (!c.annotation) {
           c.annotation = {i:c.i,
