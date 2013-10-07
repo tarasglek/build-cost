@@ -1,12 +1,3 @@
-/*
-g = new Dygraph(
-  document.getElementById("div_g"),
-  [], {
-    rollPeriod: 7,
-    errorBars: true
-  }
-);*/
-
 const IO_WAIT = -1
 const START = 0;
 const DURATION = 1;
@@ -20,7 +11,7 @@ function convert(cpu) {
     //convert negative states into error bars...ignore cpu #
     var wait_kind = cpu_num;
     var out = [s[y+1], s[y+2], wait_kind]
-    if (wait_kind == -1)
+    //if (wait_kind == IO_WAIT)
       dest.push(out)
   }
   function compare(a, b) {
@@ -64,19 +55,19 @@ function main(data) {
     var o = JSON.parse(l)
     if (o.process && o.samples.length) {
       var c = convert(o, i)
-      var n = {y:converted.length, id:converted.length, name:(o.process + "/" + o.pid), samples:c, i:0}
+      var n = {y:converted.length, id:converted.length, name:(o.process + "/" + o.pid), samples:c, i:0, regions:[]}
       if (!c.length)
         continue
 	  
       converted.push(n)
       id2name[n.y] = n.name
-      //console.log(uneval(n))
       axis_labels.push(n.name)
     }
   }
   lines = undefined
   var graph = []
-  var annotations = [];
+  var annotations = {};
+  
   while(true) {
     var lowest_start_time = undefined
     // x axis + number of processes we graph
@@ -87,6 +78,7 @@ function main(data) {
       if (c.i >= c.samples.length) {
         // remove item from input array once we are done with it
         converted.splice(y, 1);
+        annotations[c.name] = c.regions
         y--;
         continue
       }
@@ -111,17 +103,21 @@ function main(data) {
       // http://dygraphs.com/tests/custom-circles.html
 
       var wait_time = sv[1];
-      var wait_kind = sv[2];
       dest[c.id + 1] = c.y//[y*5,wait_kind]
       if (start_time == lowest_start_time) {
-        /*if (!c.annotation) {
-          c.annotation = {i:c.i,
-                             series: c.name,
-                             x: start_time,
-                             shortText: n.name}
-          annotations.push(c.annotation)
-        }*/
-
+        var wait_kind = sv[2];
+        if (wait_kind < 0) {
+          if (!c.regions.length) {
+            c.regions.push([start_time, start_time + sv[1], wait_kind, c.y])
+          } else {
+            var last = c.regions[c.regions.length - 1]
+            if (last[1] >= start_time && last[2] == wait_kind)
+              last[1] = start_time + sv[1]
+            else
+              c.regions.push([start_time, start_time + sv[1], wait_kind, c.y])
+          }
+        }
+        
         if (wait_time) {
           sv[1]--;
           sv[0]++;
@@ -144,21 +140,19 @@ function main(data) {
       //errorBars:true,
       labels: axis_labels,
       drawPoints : true,
-      drawPointCallback:Dygraph.Circles.TRIANGLE,
- pointSize : 5,
-            highlightCircleSize: 8,
+      //drawPointCallback:Dygraph.Circles.TRIANGLE,
+      pointSize : 3,
+      highlightCircleSize: 6,
       connectSeparatedPoints:true,
+      animatedZooms: true,
       yAxisLabelWidth:200,
-//      drawPointCallback: frown,
+      markers:annotations,
+      //      drawPointCallback: frown,
       axes:{y:{
               axisLabelFormatter:yFormatter,
-              gridLinePattern:[1,1]
             }}
     })
-
-  console.log(uneval(annotations))
-  g.setAnnotations(annotations)
-
+  window.g = g
 }
 
 $.ajax({url: "timechart.json", dataType:"text"}).done(main).fail(function(jqXHR, textStatus, errorThrown) {

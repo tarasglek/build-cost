@@ -4,6 +4,7 @@
 var fs = require('fs');
 var builds = JSON.parse(fs.readFileSync(process.argv[2]))
 var ec2_regexp = new RegExp("-ec2-[0-9]+$");
+
 function parseBuildConfigs(dir) {
   var build_config_files = fs.readdirSync(dir);
   var build_configs = {}
@@ -16,6 +17,43 @@ function parseBuildConfigs(dir) {
   }
   return build_configs;
 }
+
+function BuildCollection() {
+  this._builds = []
+}
+
+BuildCollection.prototype.add = function (build) {
+  var p = build.properties;
+  p.duration = b.endtime - b.starttime;
+  this._builds.push(p)
+}
+
+BuildCollection.prototype.duration = function() {
+  var duration = 0;
+  for (var i = 0;i < this._builds.length;i++) {
+    duration += this._builds[i].duration;
+  }
+  return duration;
+}
+
+BuildCollection.prototype.price = function() {
+  var price = 0;
+  for (var i = 0;i < this._builds.length;i++) {
+    var b = this._builds[i]
+    var slavename = b.slavename
+    if (slavename) {
+      var nodeType = slavename.replace(ec2_regexp, "")
+      var awsNode = build_configs[nodeType]
+      if (awsNode) {
+        awsNode = awsNode[0]
+        var pricePerHour = prices[awsNode][0] * 0.93 +  prices[awsNode][1] * 0.07 // based on convo
+        price += b.duration / 60 / 60 * pricePerHour
+      }
+    }
+  }
+  return price;
+}
+
 // hardcoded[price, reserved_price] list from http://calculator.s3.amazonaws.com/calc5.html 
 var prices = {'m3.xlarge': [0.500, 0.187], 'm1.xlarge':[ 0.480, 0.170], 'm1.large':[0.240, 0.085 ], 'm1.medium':[0.120, 0.043]};
 
@@ -26,47 +64,22 @@ var jobs = {};
 var counter=1;
 for(var i = 0;i < builds.builds.length;i++) {
   var b = builds.builds[i];
-  var duration = b.endtime - b.starttime
-  var price = 0;
-  var slavename = b.properties.slavename
+  //var price = 0;
   var builduid = b.properties.builduid;
   if (!builduid)
-    builduid="nouid"+counter++
-  if (slavename) {
-    var nodeType = slavename.replace(ec2_regexp, "")
-    var awsNode = build_configs[nodeType]
-    if (awsNode) {
-      awsNode = awsNode[0]
-      var pricePerHour = prices[awsNode][0] *0.93 +  prices[awsNode][1]*0.07 // based on convo
-      price = duration / 60 / 60 * pricePerHour
-    }
-  }
-  sum += price;
-  if (builduid in jobs) {
-    jobs[builduid].price += price;
-    jobs[builduid].duration += duration;
-  } else {
-    p = b.properties;
-    p.price = price;
-    p.duration = duration
-    jobs[builduid] = p;
-  }
-  //console.log(duration+ "\t" + nodeType + "\t" + price)  
+    builduid = "nouid" + counter++
+ 
+  var dest = jobs[builduid]
+  if (!dest)
+    jobs[builduid] = dest = new BuildCollection();
+  dest.add(b)
 }
 
 for (var builduid in jobs) {
   var j = jobs[builduid]
-  if (!max || j.price > max.price)
+  var duration = j.duration(j);
+  if (!max || duration > max)
     max = j
 }
 
-var storage = 0;
-for (var slave in builds.slaves) {
-  slave = builds.slaves[slave];
-  var nodeType = slave.replace(ec2_regexp, "")
-  var awsNode = build_configs[nodeType]
-  if (awsNode) {
-    storage += awsNode[1];
-  }
-}
-console.log([max.price, max.duration/60/60, max.builduid, max.comments, sum+storage*0.1/31])
+console.log([max.price(), max.duration()/60/60, max._builds[0].builduid, max._builds[0].comments])
