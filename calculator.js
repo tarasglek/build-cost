@@ -18,14 +18,34 @@ function parseBuildConfigs(dir) {
   return build_configs;
 }
 
+// is .result=0 some sort of a success code?
+var durations = []
+
 function BuildCollection() {
   this._builds = []
+  this._price = 0;
 }
 
 BuildCollection.prototype.add = function (build) {
-  var p = build.properties;
-  p.duration = b.endtime - b.starttime;
-  this._builds.push(p)
+  var b = build.properties;
+  b.duration = (build.endtime - build.starttime)  / 60 / 60;
+
+  var slavename = b.slavename
+  var price = 0;
+  if (slavename) {
+    var nodeType = slavename.replace(ec2_regexp, "")
+    var awsNode = build_configs[nodeType]
+    if (awsNode) {
+      awsNode = awsNode[0]
+      var pricePerHour = prices[awsNode][0] * 0.93 +  prices[awsNode][1] * 0.07 // based on convo
+      price += b.duration * pricePerHour
+    }
+  }
+
+  if (price && build.result == 0)
+    durations.push(b.duration)
+  this._price += price
+  this._builds.push(b)
 }
 
 BuildCollection.prototype.duration = function() {
@@ -37,21 +57,7 @@ BuildCollection.prototype.duration = function() {
 }
 
 BuildCollection.prototype.price = function() {
-  var price = 0;
-  for (var i = 0;i < this._builds.length;i++) {
-    var b = this._builds[i]
-    var slavename = b.slavename
-    if (slavename) {
-      var nodeType = slavename.replace(ec2_regexp, "")
-      var awsNode = build_configs[nodeType]
-      if (awsNode) {
-        awsNode = awsNode[0]
-        var pricePerHour = prices[awsNode][0] * 0.93 +  prices[awsNode][1] * 0.07 // based on convo
-        price += b.duration / 60 / 60 * pricePerHour
-      }
-    }
-  }
-  return price;
+  return this._price
 }
 
 // hardcoded[price, reserved_price] list from http://calculator.s3.amazonaws.com/calc5.html 
@@ -59,12 +65,11 @@ var prices = {'m3.xlarge': [0.500, 0.187], 'm1.xlarge':[ 0.480, 0.170], 'm1.larg
 
 var build_configs = parseBuildConfigs(process.argv[3])
 var max = 0;
-var sum = 0;
 var jobs = {};
 var counter=1;
 for(var i = 0;i < builds.builds.length;i++) {
   var b = builds.builds[i];
-  //var price = 0;
+
   var builduid = b.properties.builduid;
   if (!builduid)
     builduid = "nouid" + counter++
@@ -77,9 +82,19 @@ for(var i = 0;i < builds.builds.length;i++) {
 
 for (var builduid in jobs) {
   var j = jobs[builduid]
-  var duration = j.duration(j);
-  if (!max || duration > max)
+  var d = j.duration()
+  durations.push(d)
+  if (!max || d > max.duration())
     max = j
 }
 
-console.log([max.price(), max.duration()/60/60, max._builds[0].builduid, max._builds[0].comments])
+durations = durations.sort(function(a,b) {return a - b})
+//console.log(durations)
+for (var i = 0;i < durations.length;i++) {
+  if (durations[i] > 1) {
+    console.log(i/durations.length + "% under 1 hour")
+    break;
+  }
+}
+
+console.log([max.price(), max.duration(), max._builds[0].builduid, max._builds[0].comments])
