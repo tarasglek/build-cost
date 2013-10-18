@@ -1,6 +1,4 @@
 const KEY_FILE = process.argv[2]
-const OLD_FILE = process.argv[3]
-
 
 var aws = require('aws-lib');
 var fs = require('fs');
@@ -13,7 +11,8 @@ const AWS_ACCESS_KEY_ID = keys[0].trim();
 const AWS_SECRET_ACCESS_KEY = keys[1].trim();
 
 var firebaseLog = new Firebase(keys[2].trim());
-
+var firebaseOld = new Firebase(keys[3].trim());
+var old = {}
 
 function amazonAPI(awsApiCall, region, callback, params) {
   var ec2;
@@ -59,13 +58,8 @@ function log_activity(state, node, obj) {
 
 function processInstances(err, data) {
     var out = {}
-    var old;
     var modified = false;
-    try{
-        old = JSON.parse(fs.readFileSync(OLD_FILE));
-    } catch (e) {
-        old = {}
-    }
+
     function iterate2(x) {
         // amazon sticks groups together into a subarray
         if (x.constructor == Array) {
@@ -102,11 +96,11 @@ function processInstances(err, data) {
             modified = true;
         }
     }
-    if (modified)
-        fs.writeFileSync(OLD_FILE, JSON.stringify(out));
-//    console.log(err)
-//    console.log(JSON.stringify(data))
+    if (modified) {
+        firebaseOld.set(out)
+    }
 }
+
 
 //processInstances(undefined, JSON.parse(fs.readFileSync("instances.json")))
 function loop() {
@@ -114,5 +108,10 @@ function loop() {
     console.log("pinging aws");
     amazonAPI('DescribeInstances', 'us-west-2', processInstances);
 }
-loop();
+
+//load the old value and start monitoring
+firebaseOld.on('value', function (snapshot) {
+    old = snapshot.val();
+    loop()
+})
 //amazonAPI('DescribeSpotPriceHistory', 'us-west-2', processInstances, {ProductDescription: 'Linux/UNIX'});
