@@ -1,13 +1,19 @@
-aws = require('aws-lib');
-fs = require('fs');
-
 const KEY_FILE = process.argv[2]
 const OLD_FILE = process.argv[3]
-//plan is to record when instances go up/down..and then correlate that to spot pricing
-var keys = fs.readFileSync(KEY_FILE).toString().split("\n");
 
+
+var aws = require('aws-lib');
+var fs = require('fs');
+var Firebase = require('firebase');
+
+
+// plan is to record when instances go up/down..and then correlate that to spot pricing
+var keys = fs.readFileSync(KEY_FILE).toString().split("\n");
 const AWS_ACCESS_KEY_ID = keys[0].trim();
 const AWS_SECRET_ACCESS_KEY = keys[1].trim();
+
+var firebaseLog = new Firebase(keys[2].trim());
+
 
 function amazonAPI(awsApiCall, region, callback, params) {
   var ec2;
@@ -26,6 +32,7 @@ function amazonAPI(awsApiCall, region, callback, params) {
       }
   });
 };
+
 function age(timestamp) {
   var diff_s = (new Date() - timestamp)/1000
   if (diff_s < 60)
@@ -44,9 +51,16 @@ function pretty(instance) {
         return [instance.instanceType,instance.placement.availabilityZone,instance.instanceState.name,instance.instanceLifecycle, instance.instanceId, age(new Date(instance.launchTime))]
 }
 
+function log_activity(state, node, obj) {
+    console.log(state + " " + node + " " + pretty(obj))
+    var p = firebaseLog.push();
+    p.set({'state':state, 'node':node, 'data':obj});
+}
+
 function processInstances(err, data) {
     var out = {}
     var old;
+    var modified = false;
     try{
         old = JSON.parse(fs.readFileSync(OLD_FILE));
     } catch (e) {
@@ -62,7 +76,6 @@ function processInstances(err, data) {
             console.log(x)
             return;
             }
-//        console.log(x)
         out[x.instanceId] = x;
     }
     function iterate(x) {
@@ -73,23 +86,33 @@ function processInstances(err, data) {
     for (var old_id in old) {
         var o = old[old_id];
         if (!(old_id in out)) {
-            console.log("disappeared "+pretty(o))
-        }
-    }
-    for (var new_id in out) {
-        var n = out[new_id]
-        if (!(new_id in old)) {
-            console.log("appeared "+pretty(n))
-        } else if (n.instanceState.name != old[new_id].instanceState.name) {
-            console.log("state-change "+pretty(n))
+            log_activity(o.instanceState.name + "->disappeared", old_id, o)
+            modified = true;
         }
     }
 
-    fs.writeFileSync(OLD_FILE, JSON.stringify(out));
+    for (var new_id in out) {
+        var n = out[new_id];
+        var o = old[new_id];
+        if (!(new_id in old)) {
+            log_activity("appeared", new_id, n)
+            modified = true;
+        } else if (n.instanceState.name != o.instanceState.name) {
+            log_activity(o.instanceState.name + "->" + n.instanceState.name, new_id, n)
+            modified = true;
+        }
+    }
+    if (modified)
+        fs.writeFileSync(OLD_FILE, JSON.stringify(out));
 //    console.log(err)
 //    console.log(JSON.stringify(data))
 }
 
 //processInstances(undefined, JSON.parse(fs.readFileSync("instances.json")))
-amazonAPI('DescribeInstances', 'us-west-2', processInstances);
+function loop() {
+    setTimeout(loop, 60000);
+    console.log("pinging aws");
+    amazonAPI('DescribeInstances', 'us-west-2', processInstances);
+}
+loop();
 //amazonAPI('DescribeSpotPriceHistory', 'us-west-2', processInstances, {ProductDescription: 'Linux/UNIX'});
