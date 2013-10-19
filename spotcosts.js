@@ -1,4 +1,4 @@
-const KEY_FILE = process.argv[2]
+const CONFIG_FILE = process.argv[2]
 
 var aws = require('aws-lib');
 var fs = require('fs');
@@ -6,17 +6,15 @@ var Firebase = require('firebase');
 
 
 // plan is to record when instances go up/down..and then correlate that to spot pricing
-var keys = fs.readFileSync(KEY_FILE).toString().split("\n");
-const AWS_ACCESS_KEY_ID = keys[0].trim();
-const AWS_SECRET_ACCESS_KEY = keys[1].trim();
+var config = JSON.parse(fs.readFileSync(CONFIG_FILE))
 
-var firebaseLog = new Firebase(keys[2].trim());
-var firebaseOld = new Firebase(keys[3].trim());
+var firebaseLog = new Firebase(config.firebaseLog);
+var firebaseOld = new Firebase(config.firebaseOld);
 var old = {}
 
 function amazonAPI(awsApiCall, region, callback, params) {
   var ec2;
-  ec2 = aws.createEC2Client(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, {
+  ec2 = aws.createEC2Client(config.accessKeyId, config.secretAccessKey, {
     host: 'ec2.' + region + '.amazonaws.com'
   });
 //jq '.item[] as $o| [$o.instanceType, $o.spotPrice, $o.timestamp, $o.availabilityZone]' -c  < ret.json
