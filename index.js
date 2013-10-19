@@ -4,7 +4,6 @@ var aws = require('aws-lib');
 var fs = require('fs');
 var Firebase = require('firebase');
 
-
 // plan is to record when instances go up/down..and then correlate that to spot pricing
 var config = JSON.parse(fs.readFileSync(CONFIG_FILE))
 
@@ -51,7 +50,7 @@ function pretty(instance) {
 function log_activity(state, node, obj) {
     console.log(state + " " + node + " " + pretty(obj))
     var p = firebaseLog.push();
-    p.set({'state':state, 'node':node, 'data':obj});
+    p.set({'state':state, 'node':node, 'data':obj, 'timestamp':Date.now()});
 }
 
 function processInstances(err, data) {
