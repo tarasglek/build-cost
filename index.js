@@ -1,4 +1,4 @@
-const CONFIG_FILE = process.argv[2]
+const CONFIG_FILE = "config.json"
 
 var aws = require('aws-lib');
 var fs = require('fs');

@@ -1,0 +1,3 @@
+{ "name" : "fooo"
+, "version" : "1.0.0"
+, "dependencies" : { "aws-lib" : "*", "firebase":"*" } }
