@@ -8,8 +8,7 @@
 #
 # In order to enable or disable this script just change the execution
 # bits.
-#
-# By default this script does nothing
+# ami-7e56cf4e image
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games
 exec 2> /tmp/rc.local.log  # send stderr from rc.local to a log file
 exec 1>&2                      # send stdout to the same log file

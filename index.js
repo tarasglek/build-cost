@@ -7,8 +7,8 @@ var Firebase = require('firebase');
 // plan is to record when instances go up/down..and then correlate that to spot pricing
 var config = JSON.parse(fs.readFileSync(CONFIG_FILE))
 
-var firebaseLog = new Firebase(config.firebaseLog);
-var firebaseOld = new Firebase(config.firebaseOld);
+var firebaseLog = null;
+var firebaseOld = null;
 var old = {}
 
 function amazonAPI(awsApiCall, region, callback, params) {
@@ -54,6 +54,14 @@ function log_activity(state, node, obj) {
 }
 
 function processInstances(err, data) {
+    if (err) {
+        console.log("aws call failed");
+        return;
+    }
+
+    if (!firebaseLog)
+        firebaseLog = new Firebase(config.firebase + "/log");
+
     var out = {}
     var modified = false;
 
@@ -98,17 +106,58 @@ function processInstances(err, data) {
     }
 }
 
+var prices = {}
+
+function logSpotPrice(entry) {
+    var now = Date.now();
+    console.log(new Date(), entry.key, entry.spotPrice)
+    var f = entry.firebase;
+    if (!f) {
+        var url = config.firebase + "/spot/" + entry.key.replace('.', '_')
+        entry.firebase = f = new Firebase(url);
+    }
+    f.child(now).set(entry.spotPrice);
+}
+
+function processSpotPrices(err, data) {
+    for (var entry in data) {
+        var p = data[entry]
+        p.spotPrice *= 1;
+        var key = p.availabilityZone + "/" + p.instanceType
+        var old = prices[key]
+
+        if (!old) {
+            prices[key] = old = {'spotPrice': p.spotPrice,
+                                 'timestamp': p.timestamp,
+                                 'key': key
+                                };
+            logSpotPrice(old);
+            continue;
+        }
+        // dont record info if it didn't change
+        if (p.timestamp <= old.timestamp || p.spotPrice == old.spotPrice)
+            continue;
+        old.spotPrice = p.spotPrice;
+        old.timestamp = p.timestamp;
+        logSpotPrice(old)
+    }
+}
 
 //processInstances(undefined, JSON.parse(fs.readFileSync("instances.json")))
-function loop() {
-    setTimeout(loop, 60000);
-    console.log("pinging aws");
-    amazonAPI('DescribeInstances', 'us-west-2', processInstances);
+function loop(api_func, callback, params) {
+    setTimeout(function() {loop(api_func, callback, params)}, 60000);
+    amazonAPI(api_func, 'us-west-2', callback, params);
 }
 
 //load the old value and start monitoring
-firebaseOld.on('value', function (snapshot) {
-    old = snapshot.val();
-    loop()
-})
-//amazonAPI('DescribeSpotPriceHistory', 'us-west-2', processInstances, {ProductDescription: 'Linux/UNIX'});
+function main() {
+    firebaseOld = new Firebase(config.firebase + "/old");
+    firebaseOld.on('value', function (snapshot) {
+        old = snapshot.val();
+        loop('DescribeInstances', processInstances);
+    })
+    loop('DescribeSpotPriceHistory', processSpotPrices, {ProductDescription: 'Linux/UNIX'});
+
+}
+
+main();
