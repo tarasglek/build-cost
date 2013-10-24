@@ -94,7 +94,7 @@ function processInstances(err, data) {
         var n = out[new_id];
         var o = old[new_id];
         if (!(new_id in old)) {
-            log_activity("appeared", new_id, n)
+            log_activity("appeared->" + n.instanceState.name, new_id, n)
             modified = true;
         } else if (n.instanceState.name != o.instanceState.name) {
             log_activity(o.instanceState.name + "->" + n.instanceState.name, new_id, n)
