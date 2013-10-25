@@ -3,6 +3,7 @@ const CONFIG_FILE = "config.json"
 var aws = require('aws-lib');
 var fs = require('fs');
 var Firebase = require('firebase');
+var pricing = require("./cost-awsondemand")
 
 // plan is to record when instances go up/down..and then correlate that to spot pricing
 var config = JSON.parse(fs.readFileSync(CONFIG_FILE))
@@ -10,6 +11,26 @@ var config = JSON.parse(fs.readFileSync(CONFIG_FILE))
 var firebaseLog = null;
 var firebaseOld = null;
 var old = {}
+
+var awsPrices = null;
+
+function download(url, cb) {
+    var data = "";
+    var request = require("http").get(url, function(res) {
+        
+        res.on('data', function(chunk) {
+            data += chunk;
+        });
+        
+        res.on('end', function() {
+            cb(data);
+        })
+    });
+    
+    request.on('error', function(e) {
+        console.log("Got error: " + e.message);
+    });
+}
 
 function amazonAPI(awsApiCall, region, callback, params) {
   var ec2;
@@ -151,12 +172,17 @@ function loop(api_func, callback, params) {
 
 //load the old value and start monitoring
 function main() {
-    firebaseOld = new Firebase(config.firebase + "/old");
-    firebaseOld.on('value', function (snapshot) {
-        old = snapshot.val();
-        loop('DescribeInstances', processInstances);
-    })
     loop('DescribeSpotPriceHistory', processSpotPrices, {ProductDescription: 'Linux/UNIX'});
+
+    const ONDEMAND = "http://aws.amazon.com/ec2/pricing/pricing-on-demand-instances.json"
+    download(ONDEMAND, function(data) {
+        awsPrices = pricing.get_prices(JSON.parse(data), "linux")['us-west-2']
+        firebaseOld = new Firebase(config.firebase + "/old");
+        firebaseOld.on('value', function (snapshot) {
+            old = snapshot.val();
+            loop('DescribeInstances', processInstances);
+    })
+    })
 
 }
 
