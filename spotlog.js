@@ -1,4 +1,5 @@
 var listRef = new Firebase('https://ec2-dev-activity.firebaseio.com/log');
+var awsPrices = new Firebase('https://ec2-dev-activity.firebaseio.com/ondemand/us-west-2');
 
 function age(timestamp) {
   var diff_s = (new Date() - timestamp)/1000
@@ -15,15 +16,25 @@ function age(timestamp) {
 }
 
 listRef.on('child_added', function(snapshot) {
-    var l = snapshot.val();
-    /*if (!l.timestamp) {
-        snapshot.ref().remove();
-        return;
-    }*/
-    var node;
-    node = $("<div><i>"+age(l.timestamp)+"</i>: "
-             + l.data.instanceId + "("+l.data.instanceType+") " + l.state + " " + l.data.keyName + "</div>");
-    console.log(l)
-    document.title = l.state + " " + l.data.instanceId;
+  var l = snapshot.val();
+  /*if (!l.timestamp) {
+   snapshot.ref().remove();
+   return;
+   }*/
+  var str =  l.data.instanceId + "("+l.data.instanceType+") " + l.state + " " + l.data.keyName;
+
+  var node = $("<div><i>"+age(l.timestamp)+"</i>: "
+           + str + "</div>");
+  if (l.state.indexOf("->terminated")!=-1) {
+    var diff = l.timestamp - new Date(l.data.launchTime)
+    var type = l.data.instanceType
+    awsPrices.child(type.replace('.', '_')).on('value', function(snapshot) {
+      var perHour = snapshot.val();
+      var hours = Math.ceil(diff/1000/60/60);
+      node.append($("<span><b> $"+(hours * perHour)+"</b> ("+hours+" hours)</span>"))
+    })
+  }
+//  console.log(l)
+  document.title = l.state + " " + l.data.instanceId;
   $( ".container" ).prepend( node );
 });

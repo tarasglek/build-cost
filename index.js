@@ -177,6 +177,11 @@ function main() {
     const ONDEMAND = "http://aws.amazon.com/ec2/pricing/pricing-on-demand-instances.json"
     download(ONDEMAND, function(data) {
         awsPrices = pricing.get_prices(JSON.parse(data), "linux")['us-west-2']
+        firebaseOndemand = new Firebase(config.firebase + "/ondemand/us-west-2");
+        for (var marketingName in awsPrices) {
+            firebaseOndemand.child(marketingName.replace('.', '_')).set(awsPrices[marketingName])
+        }
+
         firebaseOld = new Firebase(config.firebase + "/old");
         firebaseOld.on('value', function (snapshot) {
             old = snapshot.val();
