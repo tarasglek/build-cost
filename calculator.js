@@ -89,7 +89,7 @@ for (var builduid in jobs) {
 }
 
 durations = durations.sort(function(a,b) {return a - b})
-//console.log(durations)
+console.log(durations)
 for (var i = 0;i < durations.length;i++) {
   if (durations[i] > 1) {
     console.log(i/durations.length + "% under 1 hour")
