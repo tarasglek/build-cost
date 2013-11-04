@@ -53,6 +53,10 @@ function calcSpotCost(launchTime, endTime, prices) {
   return cost(launchTime, endTime, firstTime, lastTime);
 }
 
+function format_price(price) {
+  return Math.round(price*100)/100
+}
+
 // fb.child("spot").child("us-west-2a").on("value", function(s) {alert(uneval(s.val()))})
 function add_cost(launchTime, endTime, instanceType, availabilityZone, jqNode) {
   var diff = endTime - launchTime;
@@ -60,13 +64,13 @@ function add_cost(launchTime, endTime, instanceType, availabilityZone, jqNode) {
   firebase.child('ondemand').child('us-west-2').child(instanceKey).on('value', function(snapshot) {
     var perHour = snapshot.val();
     var hours = Math.ceil(diff/1000/60/60);
-    jqNode.append($("<span><b> $"+(hours * perHour)+"</b> ("+hours+" hours)</span>"))
+    jqNode.append($("<span><b> $"+format_price(hours * perHour)+"</b> ("+hours+" hours)</span>"))
   })
   
   firebase.child("spot").child(availabilityZone).child(instanceKey).on('value', function(snapshot) {
     var prices = snapshot.val()
     var price = calcSpotCost(launchTime, endTime, prices)
-    jqNode.append("<span><b> s$" + Math.round(price*100)/100 + "</b></span>");
+    jqNode.append("<span><b> s$" + format_price(price) + "</b></span>");
   })
 }
 
