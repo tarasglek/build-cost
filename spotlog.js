@@ -115,8 +115,11 @@ function output(l, show_age, price_filter) {
   if (!price_filter || l.state.indexOf(price_filter)!=-1) {
     if (l.data.keyName == 'taras')
       console.log(l.data)
+    var stateReason = null;
+    if (l.data.stateReason)
+      stateReason = l.data.stateReason.code
     add_cost(new Date(l.data.launchTime)*1, l.timestamp, l.data.instanceType,
-             l.data.placement.availabilityZone, l.data.stateReason.code, node);
+             l.data.placement.availabilityZone, stateReason, node);
   }
   //console.log(l)
   // trigger firefox apptab notification
