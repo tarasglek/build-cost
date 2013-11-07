@@ -108,13 +108,26 @@ function output(l, show_age, price_filter) {
    snapshot.ref().remove();
    return;
    }*/
-  var str =  l.data.instanceId + "("+l.data.instanceType+") " + l.state + " " + l.data.keyName;
+  var keyName = l.data.keyName
+  if (!keyName) {
+    var tagSet = l.data.tagSet;
+    if (tagSet)
+      tagSet = tagSet.item;
+    keyName = ""
+    if (tagSet && tagSet.length)
+      for (var i = 0;i<tagSet.length;i++) {
+        if (keyName.length)
+          keyName +=",";
+        var v = tagSet[i]
+        keyName += v.key + ":" + v.value;
+      }
+  }
+  var str =  l.data.instanceId + "("+l.data.instanceType+") " + l.state + " " + keyName;
   var ageStr = show_age ? "<i>" + time_ago(l.timestamp) + "</i>: " : "";
   var node = $("<div>" + ageStr
                + str + "</div>");
+  node.click(function() {console.log(l)})
   if (!price_filter || l.state.indexOf(price_filter)!=-1) {
-    if (l.data.keyName == 'taras')
-      console.log(l.data)
     var stateReason = null;
     if (l.data.stateReason)
       stateReason = l.data.stateReason.code
@@ -130,7 +143,15 @@ function output(l, show_age, price_filter) {
 function pricelog () {
   var listRef = new Firebase(FIREBASE + 'log');
   listRef.on('child_added', function(snapshot) {
-    output(snapshot.val(), true, "->terminated");
+    var l = snapshot.val()
+    if (l.state != "terminated->disappeared" 
+        && l.state != "running->shutting-down"
+        && l.state != "running->stopping"
+        && l.state != "running->pending") {
+      output(l, true, "->terminated");
+    } else {
+      //snapshot.ref().remove()
+    }
   });
 }
 
