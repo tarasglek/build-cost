@@ -66,8 +66,29 @@ function format_price(price) {
   return Math.round(price*100)/100
 }
 
+function add_actual_spot_cost(instanceId, jqNode) {
+  function process_spotlog(csv) {
+    console.log(csv)
+    var hours = csv.trim().split("\n")
+    var price = hours.map(function(x) {return parseFloat(x.split(",")[1])}).reduce(function (a, b) {return a+b})
+    jqNode.append($("<span><b> real spot:$"+format_price(price)+"</b> ("+hours.length+" hours)</span>"))
+  }
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "http://taras-spot-log-processed.s3.amazonaws.com/spot-prices/" + instanceId + ".csv", true);
+  xhr.onload = function() {
+   if (xhr.status != 200) return; 
+    process_spotlog(xhr.responseText)
+  }
+  xhr.addEventListener("error",  function(err) {console.log(err)})
+  xhr.send();
+}
+
+//  $.ajax({url: "http://taras-spot-log-processed.s3.amazonaws.com/spot-prices/" + instanceId + ".csv",
+//          processData: false, error:function(err){err.responseText}/*wtf jquery*/ })
+
+
 // fb.child("spot").child("us-west-2a").on("value", function(s) {alert(uneval(s.val()))})
-function add_cost(launchTime, endTime, instanceType, availabilityZone, stateReason, jqNode) {
+function add_cost(launchTime, endTime, instanceId, instanceType, availabilityZone, stateReason, jqNode) {
   var diff = endTime - launchTime;
   var instanceKey = instanceType.replace('.', '_')
   firebase.child('ondemand').child('us-west-2').child(instanceKey).on('value', function(snapshot) {
@@ -131,8 +152,10 @@ function output(l, show_age, price_filter) {
     var stateReason = null;
     if (l.data.stateReason)
       stateReason = l.data.stateReason.code
-    add_cost(new Date(l.data.launchTime)*1, l.timestamp, l.data.instanceType,
+    add_cost(new Date(l.data.launchTime)*1, l.timestamp, l.data.instanceId ,l.data.instanceType,
              l.data.placement.availabilityZone, stateReason, node);
+    if (l.data.spotInstanceRequestId)
+      add_actual_spot_cost(l.data.instanceId, node);
   }
   //console.log(l)
   // trigger firefox apptab notification
